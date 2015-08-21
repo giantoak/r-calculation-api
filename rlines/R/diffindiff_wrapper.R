@@ -12,8 +12,8 @@
 
 diffindiff_wrapper <- function(target.region, comparison.region.set, event.date, input_data){
 	library(jsonlite)
-	input_data <- toJSON(input_data)
-	comparison.region.set <- toJSON(comparison.region.set)
+	input_data <- fromJSON(input_data)
+	comparison.region.set <- fromJSON(comparison.region.set)
 	result <- diffindiff_data(target.region = target.region, comparison.region.set = comparison.region.set, event.date = event.date, input_data = input_data)
 	return(result)
 }
