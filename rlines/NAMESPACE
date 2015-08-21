@@ -2,5 +2,4 @@
 
 export(diffindiff_data)
 export(diffindiff_wrapper)
-export(show_contents)
 export(twolines_data)
