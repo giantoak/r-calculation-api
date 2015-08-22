@@ -13,7 +13,8 @@
 #' @examples
 #' diffindiff_data()
 
-diffindiff_data<-function(target.region, comparison.region.set, event.date, logged=FALSE, normalize=FALSE, input_data, date.var="monthdate", group.var="region", var.of.interest="counts"){
+
+diffindiff_data<-function(target.region, comparison.region.set, event.date, logged=FALSE, normalize=FALSE, input_data, date.var="monthdate", group.var="region", var.of.interest="counts", standard.errors="permutation"){
   #We need the reshape2 library to use the melt function
   library(reshape2)
   library(jsonlite)
@@ -27,9 +28,11 @@ diffindiff_data<-function(target.region, comparison.region.set, event.date, logg
   
   post.var<-"post" # Set the variable name for "post"
 
+
   #Gives us counts for target and comparisons by date.  
   data<-twolines_data(target.region=target.region, comparison.region.set=comparison.region.set, data=input_data, date.var=date.var, group.var=group.var, var.of.interest=var.of.interest)
   print(data)
+  print(input_data)
   #We need to make monthdate a date, and not a string.
   data[date.var]<-as.Date(data[[date.var]], "%Y-%m-%d")
   
@@ -51,11 +54,56 @@ diffindiff_data<-function(target.region, comparison.region.set, event.date, logg
   if (normalize){
     data$counts[data$group == "Comparison"] <- data$counts[data$group == "Comparison"] * pre.target.avg/pre.comparison.avg
   }
-  print(data)
-  data <- within(data, region <- relevel(data$region, "Comparison")) # Set comparison as base group
-  #Create a string for an equation
+  #print(data)
   form<-paste(var.of.interest," ~ ", post.var, "*", group.var)
-  model<-lm(formula=form, data=data)
+  print(form)
+  if (standard.errors == "naive"){
+    # This is the naive approach, where we use actual standard errors from the regression
+    data <- within(data, region <- relevel(data$region, "Comparison")) # Set comparison as base group
+    #Create a string for an equation
+    
+    model<-lm(formula=form, data=data)
+  } else if(standard.errors == "permutation"){
+    # Here we use permutation based standard errors
+    
+    # To do this, we're starting with the input data with observations
+    # at the MSA-month level, and defining POST and Treatment variables
+    model.data<-input_data
+    model.data$monthdate <-as.Date(model.data$monthdate, "%Y-%m-%d")
+    model.data$new.region<-model.data$region == target.region
+    model.data$region<-model.data$new.region
+    model.data$new.region<-NULL
+    #data$monthdate<-as.Date(data[[date.var]], "%Y-%m-%d")
+    model.data$post<-model.data$monthdate > event.date
+    print(model.data)
+    
+    
+    # Determine permutation list of dates
+    date.list<-unique(model.data$monthdate) # find unique dates
+    date.list<-date.list[2:(length(date.list)-1)]
+    # Restrict unique dates to those that are not the very ends so that
+    # difference in differences is well defined.
+    event.date.sample<-sample(date.list,100, replace=TRUE)
+    # Take a sample of the event dates
+    results<-data.frame(monthdate=event.date.sample)
+    
+    estimate_dd_model<-function(data, form){
+      return(lm(formula=form, data=data))
+    }
+    results=list()
+    for (ed in unique(event.date.sample)) {
+      # We're going to only compute our regression for each event date once
+      model.data$post <- model.data$monthdate > ed
+      model.results<-estimate_dd_model(data=model.data, form=form)
+      results.matrix<-coef(summary(model.results))
+      results[ed]<-results.matrix[1,"Estimate"]
+      # Needs to be 4 for the dd estimate
+    } 
+    browser()
+    #model<-estimate_dd_model(data=model.data, form=form)
+    #print(model)
+  }
+  #browser()
   msum<-summary(model)
   df<-msum$df[2]
 
