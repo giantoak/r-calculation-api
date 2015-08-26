@@ -10,10 +10,10 @@
 #' @examples
 #' diffindiff_wrapper()
 
-diffindiff_wrapper <- function(target.region, comparison.region.set, event.date, input_data){
+diffindiff_wrapper <- function(target.region, comparison.region.set, event.date, input_data, standard.errors="naive"){
 	library(jsonlite)
 	input_data <- fromJSON(input_data)
 	comparison.region.set <- fromJSON(comparison.region.set)
-	result <- diffindiff_data(target.region = target.region, comparison.region.set = comparison.region.set, event.date = event.date, input_data = input_data)
+	result <- diffindiff_data(target.region = target.region, comparison.region.set = comparison.region.set, event.date = event.date, input_data = input_data, standard.errors = standard.errors)
 	return(result)
 }
