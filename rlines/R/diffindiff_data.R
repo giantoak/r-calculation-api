@@ -63,6 +63,42 @@ diffindiff_data<-function(target.region, comparison.region.set, event.date, logg
     #Create a string for an equation
     
     model<-lm(formula=form, data=data)
+    # The idea for this model is for the results to be in the order:
+    #  1: (Intercept)           
+    #  2: postTRUE            
+    #  3: groupTarget         
+    #  4: postTRUE:groupTarget
+    model.results<-coef(summary(model))
+    vcov.matrix<-vcov(model)
+    browser()
+    dd<-list(
+      b=model.results[4,"Estimate"],
+      se=model.results[4, "Std. Error"],
+      t=model.results[4,"t value"]
+    )
+    dd$p<-2*pt(-abs(dd$t),df=model$df.residual-1)
+    ###### Code to compute target and comparison differences for simple model
+    #   target.change.vec<-c(0,1,0,1)
+    #   # The target change is the sum of the 2nd and 4th variables (set target=True and change post from 1 to 0)
+    #   b.target<-target.change.vec %*% model.results[,"Estimate"]
+    #   se.target<-sqrt(target.change.vec %*% vcov.matrix %*% target.change.vec)
+    #   target.change<-list(
+    #     b=b.target[1,1],
+    #     se=se.target[1,1],
+    #     t=b.target[1,1]/se.target[1,1]
+    #     )
+    #   comparison.vec<-c(0,1,0,0)
+    #   # The comparison group is the sum of the 1st and 4th variables
+    #   b.comparison<-comparison.vec %*% model.results[,"Estimate"]
+    #   se.comparison<-sqrt(comparison.vec %*% vcov.matrix %*% comparison.vec)
+    #   comparison.change<-list(
+    #     b=b.comparison[1,1],
+    #     se=se.comparison[1,1],
+    #     t=b.comparison[1,1]/se.comparison[1,1]
+    #   )
+    #   comparison.change$p<-2*pt(-abs(comparison.change$t),df=df-1)
+    #   # Note: we have to compute p manually since non-unit vectors will have covariance terms in SE
+    #   # and hence won"t be in the main results
   } else if(standard.errors == "permutation"){
     # Here we use permutation based standard errors
     
@@ -83,64 +119,46 @@ diffindiff_data<-function(target.region, comparison.region.set, event.date, logg
     date.list<-date.list[2:(length(date.list)-1)]
     # Restrict unique dates to those that are not the very ends so that
     # difference in differences is well defined.
-    event.date.sample<-sample(date.list,100, replace=TRUE)
+    max.dates<-40
+    if (length(date.list) > max.dates){
+      event.date.sample<-sample(date.list,max.dates, replace=TRUE)
+    } else{
+      event.date.sample<-date.list
+    }
+    
     # Take a sample of the event dates
     results<-data.frame(monthdate=event.date.sample)
     
     estimate_dd_model<-function(data, form){
       return(lm(formula=form, data=data))
     }
-    results=list()
-    for (ed in unique(event.date.sample)) {
+    results=c()
+    for (ed in event.date.sample) {
       # We're going to only compute our regression for each event date once
       model.data$post <- model.data$monthdate > ed
       model.results<-estimate_dd_model(data=model.data, form=form)
       results.matrix<-coef(summary(model.results))
-      results[ed]<-results.matrix[1,"Estimate"]
+      results<-c(results,results.matrix[1,"Estimate"])
+      
       # Needs to be 4 for the dd estimate
     } 
-    browser()
+    result.df<-data.frame(date=event.date.sample, results=results)
+    point.estimate<-result.df[result.df$date==event.date,'results']  
+    number.of.results.larger <-sum(result.df$results > point.estimate)
+    number.of.results.smaller <-sum(result.df$results < point.estimate)
+    p.smaller <- (1+number.of.results.smaller)/dim(result.df)
+    p.larger <- (1+number.of.results.larger)/dim(result.df)
+    dd<-list(
+      b=point.estimate,
+      p=min(p.smaller,p.larger)
+    )
     #model<-estimate_dd_model(data=model.data, form=form)
     #print(model)
   }
-  #browser()
-  msum<-summary(model)
-  df<-msum$df[2]
 
-  # The idea for this model is for the results to be in the order:
-  #  1: (Intercept)           
-  #  2: postTRUE            
-  #  3: groupTarget         
-  #  4: postTRUE:groupTarget
-  model.results<-coef(summary(model))
-  vcov.matrix<-vcov(model)
-  dd<-list(
-    b=model.results[4,"Estimate"],
-    se=model.results[4, "Std. Error"],
-    t=model.results[4,"t value"]
-  )
-  dd$p<-2*pt(-abs(dd$t),df=df-1)
-  target.change.vec<-c(0,1,0,1)
-  # The target change is the sum of the 2nd and 4th variables (set target=True and change post from 1 to 0)
-  b.target<-target.change.vec %*% model.results[,"Estimate"]
-  se.target<-sqrt(target.change.vec %*% vcov.matrix %*% target.change.vec)
-  target.change<-list(
-    b=b.target[1,1],
-    se=se.target[1,1],
-    t=b.target[1,1]/se.target[1,1]
-    )
-  comparison.vec<-c(0,1,0,0)
-  # The comparison group is the sum of the 1st and 4th variables
-  b.comparison<-comparison.vec %*% model.results[,"Estimate"]
-  se.comparison<-sqrt(comparison.vec %*% vcov.matrix %*% comparison.vec)
-  comparison.change<-list(
-    b=b.comparison[1,1],
-    se=se.comparison[1,1],
-    t=b.comparison[1,1]/se.comparison[1,1]
-  )
-  comparison.change$p<-2*pt(-abs(comparison.change$t),df=df-1)
-  # Note: we have to compute p manually since non-unit vectors will have covariance terms in SE
-  # and hence won"t be in the main results
+
+  
+  # Clean up data to send back
   comparison<-data[data[group.var] == "Comparison",c(date.var,var.of.interest)]
   comparison[date.var] <- strftime(comparison[[date.var]],"%Y-%m-%d")
   target<-data[data[group.var] == "Target",c(date.var,var.of.interest)]
@@ -151,7 +169,8 @@ diffindiff_data<-function(target.region, comparison.region.set, event.date, logg
               comparison=comparison,
               target=target,
               #model=model, 
-              diff_in_diff=dd,
-              target_diff=target.change,
-              comparison_diff=comparison.change))
+              diff_in_diff=dd
+              #target_diff=target.change,
+              #comparison_diff=comparison.change
+              ))
 }
