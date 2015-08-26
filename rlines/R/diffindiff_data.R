@@ -3,7 +3,7 @@
 #' @param target.region: The region of interest, matching a backpage domain
 #' @param comparison.region.set: A set of regions (e.g. c('nova','abilene')) to compare to
 #' @param event.date: a YYYY-MM-DD date string for the actual event date
-#' @param logged: A boolean as to whether to perform a log transform on the data first
+#' @param logged: A boolean as to whether to perform a log transform on the plotting.data first
 #' @param input_data: The dataframe to use for diff-in-diff - needs to have 
 #' @param date.var: String name for the date variable in the input_data dataframe.
 #' @param group.var:  String name for the group (i.e. city name) variable in the input_data dataframe
@@ -18,10 +18,12 @@ diffindiff_data<-function(target.region, comparison.region.set, event.date, logg
   #We need the reshape2 library to use the melt function
   library(reshape2)
   library(jsonlite)
-  #Convert data to data frame
-  input_data <- as.data.frame(input_data)
+  #Convert plotting.data to plotting.data frame
+  input_data <- data.frame(input_data)
+  print(dim(input_data))
   #We need counts to be numberic
   input_data$counts <- as.numeric(input_data$counts)
+  input_data[date.var] <-as.Date(input_data[[date.var]], "%Y-%m-%d")
 
   #I believe this is called a character vector. Whatever it's call, this is the form comparison.region.set needs to be in
   comparison.region.set <- c(comparison.region.set$region)
@@ -29,40 +31,48 @@ diffindiff_data<-function(target.region, comparison.region.set, event.date, logg
   post.var<-"post" # Set the variable name for "post"
 
 
-  #Gives us counts for target and comparisons by date.  
-  data<-twolines_data(target.region=target.region, comparison.region.set=comparison.region.set, data=input_data, date.var=date.var, group.var=group.var, var.of.interest=var.of.interest)
-  print(data)
+  #Gives us counts for target and comparisons by date.
+  # 
+  plotting.data<-twolines_data(target.region=target.region, comparison.region.set=comparison.region.set, data=input_data, date.var=date.var, group.var=group.var, var.of.interest=var.of.interest)
+  print(plotting.data)
   print(input_data)
   #We need to make monthdate a date, and not a string.
-  data[date.var]<-as.Date(data[[date.var]], "%Y-%m-%d")
+  plotting.data[date.var]<-as.Date(plotting.data[[date.var]], "%Y-%m-%d")
   
   #Ensure event.date is type date
   event.date <- as.Date(event.date, "%Y-%m-%d")
 
   #Mark everything after the event date
-  data[post.var] = data[[date.var]] > event.date
-  #Transform the data by region
-  data<-melt(data, id=c(date.var,post.var), variable.name=group.var, value.name=var.of.interest)
+  plotting.data[post.var] = plotting.data[[date.var]] > event.date
+  #Transform the plotting.data by region
+  plotting.data<-melt(plotting.data, id=c(date.var,post.var), variable.name=group.var, value.name=var.of.interest)
   #To look at results in term of percentage if logged is true
   if (logged){
-    data[var.of.interest]<-log(1+data[var.of.interest])
+    plotting.data[var.of.interest]<-log(1+plotting.data[var.of.interest])
+    input_data$counts <- log(1+input_data$counts)
   }
-  #Both of these comes out as NaN. Why take data$group when there is no such column?
-  pre.target.avg<-mean(data[data$post==FALSE & data$region == "Target","counts"])
-  pre.comparison.avg<-mean(data[data$post==FALSE & data$region == "Comparison","counts"])
-  #What is normalize for?
+  #Both of these comes out as NaN. Why take plotting.data$group when there is no such column?
+  pre.target.avg<-mean(plotting.data[plotting.data$post==FALSE & plotting.data$region == "Target","counts"])
+  pre.comparison.avg<-mean(plotting.data[plotting.data$post==FALSE & plotting.data$region == "Comparison","counts"])
+  #Normalize will move the comparison and target lines so that they display
+  # well on the same axis on a graph. This only applies to the plotting.data
   if (normalize){
-    data$counts[data$group == "Comparison"] <- data$counts[data$group == "Comparison"] * pre.target.avg/pre.comparison.avg
+    plotting.data$counts[plotting.data$group == "Comparison"] <- plotting.data$counts[plotting.data$group == "Comparison"] * pre.target.avg/pre.comparison.avg
   }
-  #print(data)
   form<-paste(var.of.interest," ~ ", post.var, "*", group.var)
   print(form)
+  print(input_data)
   if (standard.errors == "naive"){
     # This is the naive approach, where we use actual standard errors from the regression
-    data <- within(data, region <- relevel(data$region, "Comparison")) # Set comparison as base group
+    input_data$new <- "Comparison"
+    input_data[input_data$region == target.region, c('new')]<-"Target"
+    input_data$new<- as.factor(input_data$new)
+    input_data[group.var]<-input_data$new
+    input_data$new <- NULL
+    input_data <- within(input_data, region <- relevel(input_data$region, "Comparison")) # Set comparison as base group
     #Create a string for an equation
     
-    model<-lm(formula=form, data=data)
+    model<-lm(formula=form, data=plotting.data)
     # The idea for this model is for the results to be in the order:
     #  1: (Intercept)           
     #  2: postTRUE            
@@ -70,7 +80,6 @@ diffindiff_data<-function(target.region, comparison.region.set, event.date, logg
     #  4: postTRUE:groupTarget
     model.results<-coef(summary(model))
     vcov.matrix<-vcov(model)
-    browser()
     dd<-list(
       b=model.results[4,"Estimate"],
       se=model.results[4, "Std. Error"],
@@ -102,14 +111,14 @@ diffindiff_data<-function(target.region, comparison.region.set, event.date, logg
   } else if(standard.errors == "permutation"){
     # Here we use permutation based standard errors
     
-    # To do this, we're starting with the input data with observations
+    # To do this, we're starting with the input plotting.data with observations
     # at the MSA-month level, and defining POST and Treatment variables
     model.data<-input_data
     model.data$monthdate <-as.Date(model.data$monthdate, "%Y-%m-%d")
     model.data$new.region<-model.data$region == target.region
     model.data$region<-model.data$new.region
     model.data$new.region<-NULL
-    #data$monthdate<-as.Date(data[[date.var]], "%Y-%m-%d")
+    #plotting.data$monthdate<-as.Date(plotting.data[[date.var]], "%Y-%m-%d")
     model.data$post<-model.data$monthdate > event.date
     print(model.data)
     
@@ -130,15 +139,16 @@ diffindiff_data<-function(target.region, comparison.region.set, event.date, logg
     results<-data.frame(monthdate=event.date.sample)
     
     estimate_dd_model<-function(data, form){
-      return(lm(formula=form, data=data))
+      return(lm(formula=form, data=plotting.data))
     }
     results=c()
     for (ed in event.date.sample) {
       # We're going to only compute our regression for each event date once
+      
       model.data$post <- model.data$monthdate > ed
       model.results<-estimate_dd_model(data=model.data, form=form)
       results.matrix<-coef(summary(model.results))
-      results<-c(results,results.matrix[1,"Estimate"])
+      results<-c(results,results.matrix[4,"Estimate"])
       
       # Needs to be 4 for the dd estimate
     } 
@@ -152,20 +162,20 @@ diffindiff_data<-function(target.region, comparison.region.set, event.date, logg
       b=point.estimate,
       p=min(p.smaller,p.larger)
     )
-    #model<-estimate_dd_model(data=model.data, form=form)
+    #model<-estimate_dd_model(plotting.data=model.data, form=form)
     #print(model)
   }
 
 
   
-  # Clean up data to send back
-  comparison<-data[data[group.var] == "Comparison",c(date.var,var.of.interest)]
+  # Clean up plotting.data to send back
+  comparison<-plotting.data[plotting.data[group.var] == "Comparison",c(date.var,var.of.interest)]
   comparison[date.var] <- strftime(comparison[[date.var]],"%Y-%m-%d")
-  target<-data[data[group.var] == "Target",c(date.var,var.of.interest)]
+  target<-plotting.data[plotting.data[group.var] == "Target",c(date.var,var.of.interest)]
   target[date.var] <- strftime(target[[date.var]],"%Y-%m-%d")
-  print(data)
-  data<-reshape2::dcast(data=data, formula=paste(date.var,"~",group.var), value=eval(parse(text=var.of.interest)))
-  return(list(data=data,
+  print(plotting.data)
+  plotting.data<-reshape2::dcast(data=plotting.data, formula=paste(date.var,"~",group.var), value=eval(parse(text=var.of.interest)))
+  return(list(data=plotting.data,
               comparison=comparison,
               target=target,
               #model=model, 
