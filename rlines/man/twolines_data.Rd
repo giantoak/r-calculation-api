@@ -4,9 +4,8 @@
 \alias{twolines_data}
 \title{Take region names and lookup series from a panel}
 \usage{
-twolines_data(target.region, comparison.region.set, data,
-  date.var = "monthdate", var.of.interest = "counts",
-  group.var = "region")
+twolines_data(target.region, comparison.region.set, data, date.var = "date",
+  var.of.interest = "counts", group.var = "region")
 }
 \arguments{
 \item{target.region:}{The region of interest, matching a backpage domain}

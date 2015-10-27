@@ -2,4 +2,5 @@
 
 export(diffindiff_data)
 export(diffindiff_wrapper)
+export(matchit_data)
 export(twolines_data)

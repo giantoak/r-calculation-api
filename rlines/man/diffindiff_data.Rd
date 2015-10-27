@@ -5,7 +5,7 @@
 \title{Take region names and a comparison date and does diff-in-diff}
 \usage{
 diffindiff_data(target.region, comparison.region.set, event.date,
-  logged = FALSE, normalize = FALSE, input_data, date.var = "monthdate",
+  logged = FALSE, normalize = FALSE, input_data, date.var = "date",
   group.var = "region", var.of.interest = "counts")
 }
 \arguments{

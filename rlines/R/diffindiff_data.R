@@ -13,7 +13,7 @@
 #' @examples
 #' diffindiff_data()
 
-diffindiff_data<-function(target.region, comparison.region.set, event.date, logged=FALSE, normalize=FALSE, input_data, date.var="monthdate", group.var="region", var.of.interest="counts"){
+diffindiff_data<-function(target.region, comparison.region.set, event.date, logged=FALSE, normalize=FALSE, input_data, date.var="date", group.var="region", var.of.interest="counts"){
   #We need the reshape2 library to use the melt function
   library(reshape2)
   library(jsonlite)
@@ -30,7 +30,7 @@ diffindiff_data<-function(target.region, comparison.region.set, event.date, logg
   #Gives us counts for target and comparisons by date.  
   data<-twolines_data(target.region=target.region, comparison.region.set=comparison.region.set, data=input_data, date.var=date.var, group.var=group.var, var.of.interest=var.of.interest)
   print(data)
-  #We need to make monthdate a date, and not a string.
+  #We need to make date a date, and not a string.
   data[date.var]<-as.Date(data[[date.var]], "%Y-%m-%d")
   
   #Ensure event.date is type date

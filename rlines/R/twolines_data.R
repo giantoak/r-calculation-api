@@ -8,7 +8,7 @@
 #' @examples
 #' twolines_data()
 
-twolines_data<-function(target.region, comparison.region.set, data,date.var="monthdate", var.of.interest="counts",  group.var="region"){
+twolines_data<-function(target.region, comparison.region.set, data,date.var="date", var.of.interest="counts",  group.var="region"){
   library(plyr)
   target.varname<-"Target"
   comparison.varname<-"Comparison"
